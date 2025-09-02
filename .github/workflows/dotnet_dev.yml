@@ -71,7 +71,7 @@ jobs:
       - name: Checkout DLL Repo
         uses: actions/checkout@v4
         with:
-          repository: USSBI/acumatica-packages
+          repository: ZingworksChetan/acumatica-packages
           token: ${{ secrets.GH_PAT_TOKEN }}
           path: dlls
           ref: ${{ env.DLL_BRANCH }}
