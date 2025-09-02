@@ -44,35 +44,63 @@ jobs:
           Get-ChildItem Env: | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
 
 
+      # - name: Determine Variables from Tag
+      #   id: vars
+      #   shell: pwsh
+      #   run: |
+      #     TAG="${{ inputs.tag_name }}"
+      #     echo "TAG=$TAG" >> $GITHUB_ENV
+
+      #     #Always same project name
+      #     echo "PROJECT_NAME=${{ env.P_NAME }}" >> $GITHUB_ENV
+
+      #     #Branch mapping based on tag suffix
+      #     if [[ "$TAG" == *24R1 ]]; then
+      #       DLL_BRANCH="${{ env.DLL_BRANCH_2024R1 }}"
+      #     elif [[ "$TAG" == *25R1 ]]; then
+      #       DLL_BRANCH="${{ env.DLL_BRANCH_2025R1 }}"
+      #     else
+      #       echo "Unsupported tag: $TAG"
+      #       exit 1
+      #     fi
+
+      #     #Export into environment for later steps
+      #     echo "DLL_BRANCH=$DLL_BRANCH" >> $GITHUB_ENV
+      #     echo "ZIP_NAME=${{ env.P_NAME }}[$TAG]" >> $GITHUB_ENV
+
+      #     #Now this will not be empty
+      #     echo "Final DLL_BRANCH resolved as: $DLL_BRANCH"
+
+      #     echo "dllBranch=$DLL_BRANCH" >> $GITHUB_OUTPUT
+
+
       - name: Determine Variables from Tag
         id: vars
         shell: pwsh
         run: |
-          TAG="${{ inputs.tag_name }}"
-          echo "TAG=$TAG" >> $GITHUB_ENV
+          $TAG = "${{ inputs.tag_name }}"
+          echo "TAG=$TAG" >> $env:GITHUB_ENV
 
           # Always same project name
-          echo "PROJECT_NAME=${{ env.P_NAME }}" >> $GITHUB_ENV
+          echo "PROJECT_NAME=${{ env.P_NAME }}" >> $env:GITHUB_ENV
 
           # Branch mapping based on tag suffix
-          if [[ "$TAG" == *24R1 ]]; then
-            DLL_BRANCH="${{ env.DLL_BRANCH_2024R1 }}"
-          elif [[ "$TAG" == *25R1 ]]; then
-            DLL_BRANCH="${{ env.DLL_BRANCH_2025R1 }}"
-          else
-            echo "Unsupported tag: $TAG"
+          if ($TAG -like "*24R1") {
+            $DLL_BRANCH = "${{ env.DLL_BRANCH_2024R1 }}"
+          } elseif ($TAG -like "*25R1") {
+            $DLL_BRANCH = "${{ env.DLL_BRANCH_2025R1 }}"
+          } else {
+            Write-Error "Unsupported tag: $TAG"
             exit 1
-          fi
+          }
 
           # Export into environment for later steps
-          echo "DLL_BRANCH=$DLL_BRANCH" >> $GITHUB_ENV
-          echo "ZIP_NAME=${{ env.P_NAME }}[$TAG]" >> $GITHUB_ENV
+          echo "DLL_BRANCH=$DLL_BRANCH" >> $env:GITHUB_ENV
+          echo "ZIP_NAME=${{ env.P_NAME }}[$TAG]" >> $env:GITHUB_ENV
 
-          # Now this will not be empty
-          echo "Final DLL_BRANCH resolved as: $DLL_BRANCH"
+          Write-Output "Final DLL_BRANCH resolved as: $DLL_BRANCH"
 
-          echo "dllBranch=$DLL_BRANCH" >> $GITHUB_OUTPUT
-
+          echo "dllBranch=$DLL_BRANCH" >> $env:GITHUB_OUTPUT
 
       - name: Checkout DLL Repo
         uses: actions/checkout@v4
