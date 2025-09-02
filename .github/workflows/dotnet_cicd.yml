@@ -1,0 +1,193 @@
+name: deploy to QA/STG Template
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+        description: 'Git tag name triggering deployment'
+      build_no:
+        required: true
+        type: string
+        description: 'Build number to deploy'
+      
+jobs:
+  deploy_qa:
+    runs-on: windows-latest
+    environment: QA
+    outputs:
+      zipName: ${{ steps.build.outputs.zipName }}
+      dllBranch: ${{ steps.vars.outputs.dllBranch }}
+
+    env:
+      # PROJECT_NAME:  ${{ vars.PROJECT_NAME }}
+      P_NAME:  ${{ vars.P_NAME }}
+      DLL_BRANCH_2024R1: ${{ vars.DLL_BRANCH_2024R1 }}
+      DLL_BRANCH_2025R1: ${{ vars.DLL_BRANCH_2025R1 }}
+      SOLUTION: ${{ vars.P_NAME }}.sln     
+      PROJECT: ${{ vars.P_NAME }}\${{ vars.P_NAME }}.csproj
+      AC_BASE_URL: ${{ vars.AC_BASE_URL }}
+      AC_USERNAME: ${{ vars.AC_USERNAME }}
+      AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+      PROJECT_DESCRIPTION: ${{ vars.PROJECT_DESCRIPTION }}
+      PROJECT_LEVEL: ${{ vars.PROJECT_LEVEL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log Environment Variables
+        shell: pwsh
+        run: |
+          Write-Host "Logging environment variables:"
+          Get-ChildItem Env: | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
+
+
+      - name: Determine Variables from Tag
+        id: vars
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag_name }}"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+          # Always same project name
+          echo "PROJECT_NAME=${{ env.P_NAME }}" >> $GITHUB_ENV
+
+          # Branch mapping based on tag suffix
+          if [[ "$TAG" == *24R1 ]]; then
+            DLL_BRANCH="${{ env.DLL_BRANCH_2024R1 }}"
+          elif [[ "$TAG" == *25R1 ]]; then
+            DLL_BRANCH="${{ env.DLL_BRANCH_2025R1 }}"
+          else
+            echo "Unsupported tag: $TAG"
+            exit 1
+          fi
+
+          # Export into environment for later steps
+          echo "DLL_BRANCH=$DLL_BRANCH" >> $GITHUB_ENV
+          echo "ZIP_NAME=${{ env.P_NAME }}[$TAG]" >> $GITHUB_ENV
+
+          # Now this will not be empty
+          echo "Final DLL_BRANCH resolved as: $DLL_BRANCH"
+
+          echo "dllBranch=$DLL_BRANCH" >> $GITHUB_OUTPUT
+
+
+      - name: Checkout DLL Repo
+        uses: actions/checkout@v4
+        with:
+          repository: USSBI/acumatica-packages
+          token: ${{ secrets.GH_PAT_TOKEN }}
+          path: dlls
+          ref: ${{ env.DLL_BRANCH }}
+
+
+      - name: Copy DLLs from dll-store to project bin
+        shell: pwsh
+        run: |
+          $dest = "${{ env.P_NAME }}\bin\Release"
+          if (-Not (Test-Path -LiteralPath $dest)) {
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          }
+          Copy-Item -Path "dlls\*.dll" -Destination $dest -Force
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Build Project
+        run: msbuild $env:PROJECT /p:Configuration=Release
+        shell: pwsh
+        env:
+          PROJECT: ${{ env.P_NAME }}\${{ env.P_NAME }}.csproj
+          NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+
+      - name: Copy DLL to Customization Bin
+        shell: pwsh
+        run: |
+          $projectName = "${{ env.P_NAME }}"
+          $dllName = "${{ env.P_NAME }}.dll"
+          # Full source path
+          $source = Join-Path -Path $PWD.Path -ChildPath "$projectName\bin\Release"
+          # Destination inside the Customizations folder
+          $destination = Join-Path -Path $PWD.Path -ChildPath "Customizations\$projectName\Bin"
+          Write-Host "Copying built DLL from: $source"
+          Write-Host "Destination path: $destination"
+          if (Test-Path -LiteralPath $source) {
+           New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            $dllSourcePath = Join-Path $source $dllName
+            Copy-Item -LiteralPath $dllSourcePath -Destination $destination -Force
+            Write-Host "DLL copied to $destination"
+          } else {
+            Write-Host "Source path not found: $source"
+          }
+
+      - name: Build Customization Package
+        id: build
+        shell: pwsh
+        run: |
+          $zipName = "$($env:P_NAME)[${{ inputs.tag_name }}]"
+          echo "zipName=$zipName" >> $env:GITHUB_OUTPUT
+          pwsh ./buildCustomization.ps1 $zipName
+
+      - name: Upload ZIP Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.zipName }}
+          path: build/*.zip
+
+      - name: Run Publish to QA
+        shell: pwsh
+        run: |
+         ./publishCustomization.ps1 ${{ steps.build.outputs.zipName }}
+
+  deploy_stage:
+    needs: deploy_qa
+    runs-on: windows-latest
+    environment: STG
+
+    env:
+      AC_BASE_URL: ${{ vars.AC_BASE_URL }}
+      AC_USERNAME: ${{ vars.AC_USERNAME }}
+      AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+      PROJECT_DESCRIPTION: ${{ vars.PROJECT_DESCRIPTION }}
+      PROJECT_LEVEL: ${{ vars.PROJECT_LEVEL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Debug � Print Inputs from deploy_qa
+        shell: pwsh
+        run: |
+          Write-Host "=== Debug Info from deploy_qa ==="
+          Write-Host "Zip Name:   ${{ needs.deploy_qa.outputs.zipName }}"
+          Write-Host "DLL Branch: ${{ needs.deploy_qa.outputs.dllBranch }}"
+
+      - name: Checkout DLL Repo
+        uses: actions/checkout@v4
+        with:
+          repository: USSBI/acumatica-packages
+          token: ${{ secrets.GH_PAT_TOKEN }}
+          path: dlls
+          ref: ${{ needs.deploy_qa.outputs.dllBranch }}
+
+      - name: Debug � Print checkout paths
+        shell: pwsh
+        run: |
+          Write-Host "GitHub Workspace: $env:GITHUB_WORKSPACE"
+          Write-Host "Repo checked out into: $env:GITHUB_WORKSPACE\dlls"
+          Write-Host "Listing DLL repo contents:"
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\dlls" -Recurse
+
+      - name: Download ZIP Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.deploy_qa.outputs.zipName }}
+          path: build
+          merge-multiple: true
+
+      - name: Run Publish to Stage
+        shell: pwsh
+        run: |
+         ./publishCustomization.ps1 ${{ needs.deploy_qa.outputs.zipName }}

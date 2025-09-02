@@ -1,0 +1,75 @@
+name: Publish Customization
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        default: 'QA'
+        type: string
+        # options:
+        #   - QA
+        #   - STG
+        #   - PROD  
+        description: 'Environment to deploy (e.g., QA, STG, PROD)'
+      publishValidateOnly:
+        description: 'Publish validation only'
+        default: false
+        required: true
+        type: boolean
+      version_pattern:
+        description: 'Version pattern (e.g., "v1.25.10" for v1.25.10.x series)'
+        default: 'v1.25.'
+        required: true
+        type: string
+      NAWUnitedSiteServices:
+        required: true
+        type: boolean
+        default: true
+        description: 'NAWUnitedSiteServices'
+      AcumaticaUSSFenceCustomizations:
+        required: true
+        type: boolean
+        default: true
+        description: 'AcumaticaUSSFenceCustomizations[2024R1]'
+      USSFence:
+        required: true
+        type: boolean
+        default: true
+        description: 'USSFence'
+
+jobs:
+  publishRelease:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    outputs:
+      results: ${{ steps.search.outputs.results }}
+    steps:
+    - name: Validate version pattern format
+      if: ${{ github.event.inputs.version_pattern != '' }}
+      run: |
+        if [[ ! "${{ github.event.inputs.version_pattern }}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Error: version_pattern must be in the format v1.15.x"
+          exit 1
+        fi
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Install dependencies
+      run: npm install
+    - name: Publish to Acumatica
+      id: search
+      run: |
+        npm run publish
+      env:
+        NAWUnitedSiteServices: ${{ github.event.inputs.NAWUnitedSiteServices }}
+        AcumaticaUSSFenceCustomizations: ${{ github.event.inputs.AcumaticaUSSFenceCustomizations }} 
+        USSFence: ${{ github.event.inputs.USSFence }}
+        TAG_PATTERN: ${{ github.event.inputs.version_pattern }}
+        VALIDATE_ONLY: ${{ github.event.inputs.publishValidateOnly }}
+        AC_USERNAME: ${{ vars.AC_USERNAME }}
+        AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+        AC_TENANT: ${{ vars.AC_TENANT }}
+        AC_BRANCH: ${{ vars.AC_BRANCH }}
+        AC_BASE_URL: ${{ vars.AC_BASE_URL }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        ENVIRONMENT_NAME: ${{ job.environment.name }}

@@ -1,0 +1,23 @@
+{
+  "name": "acumatica-workflow-template",
+  "version": "1.0.0",
+  "description": "Repository to store the shared workflows for Acumatica CI/CD pipelines",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "publish": "node ./scripts/publish.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/USSBI/acumatica-workflow-template.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/USSBI/acumatica-workflow-template/issues"
+  },
+  "homepage": "https://github.com/USSBI/acumatica-workflow-template#readme",
+  "dependencies": {
+    "axios": "^1.9.0"
+  }
+}

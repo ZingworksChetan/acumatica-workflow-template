@@ -1,0 +1,101 @@
+name: Workflow Template
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: 'Tag to deploy'
+
+jobs:
+  deploy_qa:
+    runs-on: ubuntu-latest
+    environment: QA
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build:ci
+        env:
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          PROJECT_DESCRIPTION: ${{ vars.PROJECT_DESCRIPTION }}
+          PROJECT_LEVEL: ${{ vars.PROJECT_LEVEL }}
+          BUILD_VERSION: ${{ inputs.tag }}
+      - name: upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ vars.PROJECT_NAME }}[${{ inputs.tag }}]
+          path: build/${{ vars.PROJECT_NAME }}*.zip
+          if-no-files-found: error
+
+      - name: Deploy to QA
+        run: |
+          echo "Deploying tag ${{ github.ref_name }}..."
+          npm run deploy
+        env:
+          AC_USERNAME: ${{ vars.AC_USERNAME }}
+          AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+          AC_TENANT: ${{ vars.AC_TENANT }}
+          AC_BRANCH: ${{ vars.AC_BRANCH }}
+          AC_BASE_URL: ${{ vars.AC_BASE_URL }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          PROJECT_DESCRIPTION: ${{ vars.PROJECT_DESCRIPTION }}
+          PROJECT_LEVEL: ${{ vars.PROJECT_LEVEL }}
+          BUILD_VERSION: ${{ inputs.tag }}
+  
+  promote-stg:
+    runs-on: ubuntu-latest
+    environment: STG
+    needs: deploy_qa
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ vars.PROJECT_NAME }}[${{ inputs.tag }}]
+          path: build 
+      - name: Deploy to STG
+        run: |
+          echo "Deploying tag ${{ github.ref_name }}..."
+          npm run deploy
+        env:
+          AC_USERNAME: ${{ vars.AC_USERNAME }}
+          AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+          AC_TENANT: ${{ vars.AC_TENANT }}
+          AC_BRANCH: ${{ vars.AC_BRANCH }}
+          AC_BASE_URL: ${{ vars.AC_BASE_URL }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          PROJECT_DESCRIPTION: ${{ vars.PROJECT_DESCRIPTION }}
+          PROJECT_LEVEL: ${{ vars.PROJECT_LEVEL }}
+          BUILD_VERSION: ${{ inputs.tag }}
+      
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: ./build/${{ vars.PROJECT_NAME }}[${{ inputs.tag }}].zip
+          # release_name: Release ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
