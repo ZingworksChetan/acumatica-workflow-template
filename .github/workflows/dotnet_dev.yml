@@ -44,7 +44,7 @@ jobs:
 
       - name: Determine Variables from Branch
         id: vars
-        shell: bash
+        shell: pwsh
         run: |
           BRANCH="${{ inputs.branch }}"
           echo "BRANCH=BRANCH" >> $GITHUB_ENV

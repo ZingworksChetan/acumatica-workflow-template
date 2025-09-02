@@ -46,7 +46,7 @@ jobs:
 
       - name: Determine Variables from Tag
         id: vars
-        shell: bash
+        shell: pwsh
         run: |
           TAG="${{ inputs.tag_name }}"
           echo "TAG=$TAG" >> $GITHUB_ENV
