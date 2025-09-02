@@ -191,6 +191,7 @@ jobs:
           Write-Host "=== Debug Info from deploy_qa ==="
           Write-Host "Zip Name:   ${{ needs.deploy_qa.outputs.zipName }}"
           Write-Host "DLL Branch: ${{ needs.deploy_qa.outputs.dllBranch }}"
+          Write-Host "Zip Name with id: ${{ needs.build.outputs.zipName }}"
 
       - name: Checkout DLL Repo
         uses: actions/checkout@v4
@@ -205,17 +206,17 @@ jobs:
         run: |
           Write-Host "GitHub Workspace: $env:GITHUB_WORKSPACE"
           Write-Host "Repo checked out into: $env:GITHUB_WORKSPACE\dlls"
-          Write-Host "Listing DLL repo contents:"
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\dlls" -Recurse
+          # Write-Host "Listing DLL repo contents:"
+          # Get-ChildItem -Path "$env:GITHUB_WORKSPACE\dlls" -Recurse
 
       - name: Download ZIP Artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.deploy_qa.outputs.zipName }}
+          name: ${{ needs.build.outputs.zipName }}
           path: build
           merge-multiple: true
 
       - name: Run Publish to Stage
         shell: pwsh
         run: |
-         ./publishCustomization.ps1 ${{ needs.build.outputs.zipName }}
+         ./publishCustomization.ps1 ${{ needs.deploy_qa.outputs.zipName }}
